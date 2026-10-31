@@ -1,0 +1,65 @@
+# =====================================================================
+# Smart Medical Reminder System - Git Ignore Rules
+# =====================================================================
+
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Production Build Artifacts
+dist/
+dist-ssr/
+build/
+*.local
+
+# Environment Variables & Secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.cert
+
+# SQLite Databases & Local Runtime Storage
+server/data/*.db
+server/data/*.db-shm
+server/data/*.db-wal
+server/data/*.sqlite
+server/data/*.sqlite3
+server/data/alerts.json
+server/data/caretaker.json
+*.db
+*.db-shm
+*.db-wal
+
+# User Uploads (Medicine photos, prescriptions)
+server/uploads/*
+!server/uploads/.gitkeep
+
+# Logs & Diagnostics
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Editor & IDE Directories
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Operating System Files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+[Dd]esktop.ini
