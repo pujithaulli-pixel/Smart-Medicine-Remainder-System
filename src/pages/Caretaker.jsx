@@ -4,6 +4,7 @@ import {
   IconCaretaker,
   IconShield,
   IconCheck,
+  IconCheckCircle,
   IconAlertCircle,
   IconInfo,
   IconClock,

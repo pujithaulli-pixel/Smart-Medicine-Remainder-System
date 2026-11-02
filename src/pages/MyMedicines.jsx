@@ -16,7 +16,8 @@ import {
   IconCheck,
   IconHeartPulse,
   IconShield,
-  IconInfo
+  IconInfo,
+  IconX
 } from '../components/Icons';
 import { formatShortDate, formatTime12h, calculateTreatmentDuration } from '../utils/dateUtils';
 
