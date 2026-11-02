@@ -16,10 +16,12 @@ import {
   IconShield,
   IconVolume,
   IconCheck,
-  IconCaretaker
+  IconCaretaker,
+  IconLogOut
 } from '../components/Icons';
 import { formatDisplayDate, formatTime12h, getTodayDateString } from '../utils/dateUtils';
 import { alarmSoundService } from '../services/alarmSoundService';
+import { PatientCaretakerLinking } from '../components/PatientCaretakerLinking';
 
 export const Dashboard = () => {
   const {
@@ -38,7 +40,8 @@ export const Dashboard = () => {
     showToast,
     caretaker,
     caretakerAlerts,
-    setIsNotificationPanelOpen
+    setIsNotificationPanelOpen,
+    logout
   } = useApp();
 
   const handleTestChime = () => {
@@ -285,6 +288,30 @@ export const Dashboard = () => {
           >
             <IconVolume size={15} color="#ffffff" />
             <span>Test Alarm Sound</span>
+          </button>
+
+          <button
+            type="button"
+            className="btn btn-sm"
+            onClick={logout}
+            style={{
+              backgroundColor: 'rgba(239, 68, 68, 0.3)',
+              color: '#ffffff',
+              border: '1px solid rgba(254, 202, 202, 0.6)',
+              fontSize: '0.82rem',
+              fontWeight: 700,
+              borderRadius: '20px',
+              padding: '6px 14px',
+              width: '100%',
+              justifyContent: 'center',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px'
+            }}
+            title={t.auth?.signOut || 'Log Out'}
+          >
+            <IconLogOut size={14} color="#ffffff" />
+            <span>{t.auth?.signOut || 'Sign Out'}</span>
           </button>
         </div>
       </section>
@@ -835,7 +862,7 @@ export const Dashboard = () => {
             </div>
 
             {/* Quick Action Buttons */}
-            <div style={{ display: 'flex', gap: '8px' }}>
+            <div style={{ display: 'flex', gap: '8px', marginBottom: '20px' }}>
               <button
                 type="button"
                 className="btn btn-secondary btn-sm"
@@ -853,6 +880,9 @@ export const Dashboard = () => {
                 {t.dashboard.caretakerSection?.btnSettings || 'Caretaker Settings'}
               </button>
             </div>
+
+            {/* Phase 10: Patient-Caretaker Invitation & Connection Management */}
+            <PatientCaretakerLinking />
           </section>
         </div>
       </div>

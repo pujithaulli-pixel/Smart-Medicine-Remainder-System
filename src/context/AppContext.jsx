@@ -197,7 +197,18 @@ export const AppProvider = ({ children }) => {
       if (Array.isArray(fetchedMeds)) setMedicines(fetchedMeds);
       if (Array.isArray(fetchedDoseHist)) setDoseHistory(fetchedDoseHist);
       if (Array.isArray(fetchedMedHist)) setMedicineHistory(fetchedMedHist);
-      if (fetchedCaretaker && fetchedCaretaker.name) setCaretaker(fetchedCaretaker);
+      if (fetchedCaretaker && fetchedCaretaker.name) {
+        setCaretaker(fetchedCaretaker);
+      } else {
+        setCaretaker({
+          name: '',
+          relationship: '',
+          phone: '',
+          email: '',
+          preferredChannel: 'email',
+          alertsEnabled: true
+        });
+      }
       if (fetchedPrefs) setPreferences((prev) => ({ ...prev, ...fetchedPrefs }));
 
       // Handle Today's Schedule Sync
@@ -209,6 +220,8 @@ export const AppProvider = ({ children }) => {
         if (synced.length > 0) {
           dosesApi.syncOccurrences(synced).catch(console.warn);
         }
+      } else {
+        setTodayDoses([]);
       }
 
       // Check if migration modal should be presented
@@ -253,6 +266,20 @@ export const AppProvider = ({ children }) => {
     }
   }, [user?.id]);
 
+  const loginWithCredentials = async (email, password) => {
+    try {
+      const res = await authApi.login({ email, password });
+      if (res && res.user) {
+        setUser(res.user);
+        setActivePage('dashboard');
+        return { success: true, user: res.user };
+      }
+      return { success: false, error: res?.error || 'Invalid credentials' };
+    } catch (e) {
+      return { success: false, error: e.message || 'Login failed' };
+    }
+  };
+
   const logout = async () => {
     try {
       await authApi.logout();
@@ -260,6 +287,9 @@ export const AppProvider = ({ children }) => {
       console.warn('Logout error:', e);
     }
     setUser(null);
+    setActivePage('dashboard');
+    setIsNotificationPanelOpen(false);
+    alarmSoundService.stopAlarm();
     setMedicines(getStoredItem(StorageKeys.MEDICINES, INITIAL_SAMPLE_MEDICINES));
     setDoseHistory(getStoredItem(StorageKeys.DOSE_HISTORY, INITIAL_DOSE_HISTORY));
     setMedicineHistory(getStoredItem(StorageKeys.MEDICINE_HISTORY, INITIAL_MEDICINE_HISTORY));
@@ -295,6 +325,9 @@ export const AppProvider = ({ children }) => {
 
   useEffect(() => {
     const runEngineTick = () => {
+      // Phase 10: Only tick patient dose alarms when authenticated as a patient
+      if (!user || user.role !== 'patient') return;
+
       const now = new Date();
       const isTestMode = Boolean(preferences.isTestMode);
 
@@ -884,6 +917,7 @@ export const AppProvider = ({ children }) => {
         migrationModalOpen,
         setMigrationModalOpen,
         refreshUserData,
+        loginWithCredentials,
         logout
       }}
     >

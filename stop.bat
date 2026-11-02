@@ -7,23 +7,10 @@ echo           STOPPING SMART MEDICAL REMINDER SYSTEM SERVICES
 echo ======================================================================
 echo.
 
-:: 1. Terminate processes on port 3000 (Frontend Vite)
-echo [INFO] Checking for processes listening on port 3000 (Frontend)...
-for /f "tokens=5" %%a in ('netstat -ano ^| findstr ":3000"') do (
-    if not "%%a"=="0" (
-        echo Killing process PID %%a on port 3000...
-        taskkill /F /PID %%a >nul 2>nul
-    )
-)
-
-:: 2. Terminate processes on port 3001 (Backend API)
-echo [INFO] Checking for processes listening on port 3001 (Backend API)...
-for /f "tokens=5" %%a in ('netstat -ano ^| findstr ":3001"') do (
-    if not "%%a"=="0" (
-        echo Killing process PID %%a on port 3001...
-        taskkill /F /PID %%a >nul 2>nul
-    )
-)
+:: 1. Forcefully release ports 3000 and 3001 using PowerShell
+echo [INFO] Releasing ports 3000 and 3001...
+powershell -NoProfile -ExecutionPolicy Bypass -Command "Stop-Process -Id (Get-NetTCPConnection -LocalPort 3000,3001 -State Listen -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess -Unique) -Force -ErrorAction SilentlyContinue" >nul 2>nul
+powershell -NoProfile -ExecutionPolicy Bypass -Command "Get-CimInstance Win32_Process | Where-Object { $_.Name -eq 'node.exe' -and ($_.CommandLine -like '*server/index.js*' -or $_.CommandLine -like '*vite*') } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }" >nul 2>nul
 
 echo.
 echo [SUCCESS] Both Frontend and Backend services have been stopped.

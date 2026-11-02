@@ -45,6 +45,7 @@ export const initSchema = () => {
       name TEXT NOT NULL,
       password_hash TEXT NOT NULL,
       salt TEXT NOT NULL,
+      role TEXT DEFAULT 'patient',
       language TEXT DEFAULT 'en',
       timezone TEXT DEFAULT 'Asia/Kolkata',
       created_at TEXT NOT NULL,
@@ -216,6 +217,31 @@ export const initSchema = () => {
       created_at TEXT NOT NULL
     );
 
+    -- 11. Patient-Caretaker Relationship Links (Phase 10)
+    CREATE TABLE IF NOT EXISTS patient_caretaker_links (
+      id TEXT PRIMARY KEY,
+      patient_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      caretaker_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      status TEXT DEFAULT 'active',
+      permissions_json TEXT DEFAULT '{"viewSchedule":true,"viewHistory":true,"receiveAlerts":true}',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      UNIQUE(patient_id, caretaker_id)
+    );
+
+    -- 12. Patient Caretaker Invitations (Phase 10)
+    CREATE TABLE IF NOT EXISTS patient_invitations (
+      id TEXT PRIMARY KEY,
+      patient_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      invitation_code TEXT UNIQUE NOT NULL COLLATE NOCASE,
+      permissions_json TEXT DEFAULT '{"viewSchedule":true,"viewHistory":true,"receiveAlerts":true}',
+      status TEXT DEFAULT 'pending',
+      expires_at TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      used_by_caretaker_id TEXT REFERENCES users(id) ON DELETE SET NULL,
+      used_at TEXT
+    );
+
     -- Indexes for performance and multi-tenant queries
     CREATE INDEX IF NOT EXISTS idx_sessions_token ON sessions(token);
     CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
@@ -224,13 +250,38 @@ export const initSchema = () => {
     CREATE INDEX IF NOT EXISTS idx_dose_hist_user_date ON dose_history(user_id, date);
     CREATE INDEX IF NOT EXISTS idx_caretaker_alerts_user ON caretaker_alerts(user_id, alert_type, status);
     CREATE INDEX IF NOT EXISTS idx_user_uploads_user ON user_uploads(user_id);
+    CREATE INDEX IF NOT EXISTS idx_patient_links_patient ON patient_caretaker_links(patient_id, status);
+    CREATE INDEX IF NOT EXISTS idx_patient_links_caretaker ON patient_caretaker_links(caretaker_id, status);
+    CREATE INDEX IF NOT EXISTS idx_patient_invitations_code ON patient_invitations(invitation_code, status);
   `);
+
+  try {
+    db.exec("ALTER TABLE users ADD COLUMN role TEXT DEFAULT 'patient';");
+  } catch (e) {
+    // Column already exists
+  }
 
   try {
     db.exec("ALTER TABLE user_preferences ADD COLUMN alarm_sound TEXT DEFAULT 'gentle-chime';");
   } catch (e) {
     // Column already exists
   }
+
+  try {
+    db.exec("ALTER TABLE caretaker_alerts ADD COLUMN acknowledged INTEGER DEFAULT 0;");
+  } catch (e) {}
+
+  try {
+    db.exec("ALTER TABLE caretaker_alerts ADD COLUMN acknowledged_at TEXT;");
+  } catch (e) {}
+
+  try {
+    db.exec("ALTER TABLE caretaker_alerts ADD COLUMN acknowledged_by TEXT;");
+  } catch (e) {}
+
+  try {
+    db.exec("ALTER TABLE caretaker_alerts ADD COLUMN caretaker_note TEXT;");
+  } catch (e) {}
 };
 
 // Auto-run schema initialization

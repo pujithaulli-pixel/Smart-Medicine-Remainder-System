@@ -10,24 +10,33 @@ import {
   IconCaretaker,
   IconSettings,
   IconHeartPulse,
-  IconX
+  IconX,
+  IconLogOut
 } from './Icons';
 import { useApp } from '../context/AppContext';
 
 export const Sidebar = () => {
-  const { activePage, setActivePage, mobileMenuOpen, setMobileMenuOpen, t } = useApp();
+  const { user, activePage, setActivePage, mobileMenuOpen, setMobileMenuOpen, t, logout } = useApp();
 
-  const navItems = [
-    { id: 'dashboard', label: t.nav.dashboard, icon: <IconDashboard size={20} /> },
-    { id: 'addMedicine', label: t.nav.addMedicine, icon: <IconPlus size={20} /> },
-    { id: 'myMedicines', label: t.nav.myMedicines, icon: <IconPill size={20} /> },
-    { id: 'medicineTaken', label: t.nav.medicineTaken, icon: <IconCheckCircle size={20} /> },
-    { id: 'medicineMissed', label: t.nav.medicineMissed, icon: <IconXCircle size={20} /> },
-    { id: 'medicineHistory', label: t.nav.medicineHistory, icon: <IconHistory size={20} /> },
-    { id: 'reports', label: t.nav.reports, icon: <IconReports size={20} /> },
-    { id: 'caretaker', label: t.nav.caretaker, icon: <IconCaretaker size={20} /> },
-    { id: 'settings', label: t.nav.settings, icon: <IconSettings size={20} /> }
-  ];
+  const isCaretaker = user?.role === 'caretaker';
+
+  const navItems = isCaretaker
+    ? [
+        { id: 'dashboard', label: t.caretakerDashboard?.title || 'Caretaker Center', icon: <IconDashboard size={20} /> },
+        { id: 'caretaker', label: t.nav.caretaker, icon: <IconCaretaker size={20} /> },
+        { id: 'settings', label: t.nav.settings, icon: <IconSettings size={20} /> }
+      ]
+    : [
+        { id: 'dashboard', label: t.nav.dashboard, icon: <IconDashboard size={20} /> },
+        { id: 'addMedicine', label: t.nav.addMedicine, icon: <IconPlus size={20} /> },
+        { id: 'myMedicines', label: t.nav.myMedicines, icon: <IconPill size={20} /> },
+        { id: 'medicineTaken', label: t.nav.medicineTaken, icon: <IconCheckCircle size={20} /> },
+        { id: 'medicineMissed', label: t.nav.medicineMissed, icon: <IconXCircle size={20} /> },
+        { id: 'medicineHistory', label: t.nav.medicineHistory, icon: <IconHistory size={20} /> },
+        { id: 'reports', label: t.nav.reports, icon: <IconReports size={20} /> },
+        { id: 'caretaker', label: t.nav.caretaker, icon: <IconCaretaker size={20} /> },
+        { id: 'settings', label: t.nav.settings, icon: <IconSettings size={20} /> }
+      ];
 
   const handleNavClick = (id) => {
     setActivePage(id);
@@ -118,7 +127,7 @@ export const Sidebar = () => {
                   letterSpacing: '0.02em'
                 }}
               >
-                Phase 1 Prototype
+                {t.appSubtitle}
               </span>
             </div>
           </div>
@@ -194,6 +203,85 @@ export const Sidebar = () => {
             );
           })}
         </nav>
+
+        {/* User Account & Direct Logout Section (Phase 10) */}
+        {user && (
+          <div
+            style={{
+              padding: '14px 16px',
+              borderTop: '1px solid var(--border-light)',
+              backgroundColor: '#ffffff'
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '10px' }}>
+              <div
+                style={{
+                  width: '36px',
+                  height: '36px',
+                  borderRadius: '50%',
+                  backgroundColor: isCaretaker ? '#9333ea' : 'var(--primary-600)',
+                  color: '#ffffff',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontWeight: 700,
+                  fontSize: '0.9rem',
+                  flexShrink: 0
+                }}
+              >
+                {(user.name ? user.name.charAt(0) : user.email?.charAt(0) || 'U').toUpperCase()}
+              </div>
+              <div style={{ flex: 1, minWidth: 0, overflow: 'hidden' }}>
+                <div
+                  style={{
+                    fontSize: '0.88rem',
+                    fontWeight: 700,
+                    color: 'var(--text-main)',
+                    whiteSpace: 'nowrap',
+                    textOverflow: 'ellipsis',
+                    overflow: 'hidden'
+                  }}
+                >
+                  {user.name || user.email?.split('@')[0]}
+                </div>
+                <div
+                  style={{
+                    fontSize: '0.74rem',
+                    fontWeight: 700,
+                    color: isCaretaker ? '#7e22ce' : '#0369a1'
+                  }}
+                >
+                  {isCaretaker ? (t.roles?.caretaker || 'Caretaker') : (t.roles?.patient || 'Patient')}
+                </div>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={logout}
+              style={{
+                width: '100%',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '8px',
+                padding: '9px 12px',
+                borderRadius: '8px',
+                border: '1px solid #fecaca',
+                backgroundColor: '#fef2f2',
+                color: '#dc2626',
+                fontWeight: 700,
+                fontSize: '0.85rem',
+                cursor: 'pointer',
+                transition: 'all 0.15s ease'
+              }}
+              className="sidebar-logout-btn"
+            >
+              <IconLogOut size={16} color="#dc2626" />
+              <span>{t.auth?.signOut || 'Sign Out'}</span>
+            </button>
+          </div>
+        )}
 
         {/* Footer info tag */}
         <div

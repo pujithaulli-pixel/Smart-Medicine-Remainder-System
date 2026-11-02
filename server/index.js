@@ -17,6 +17,7 @@ import { alertStore } from './services/alertStore.js';
 import { getNotificationTemplate } from './templates.js';
 import * as authService from './services/authService.js';
 import * as dataService from './services/dataService.js';
+import { seedDemoAccounts } from './services/seedService.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -767,6 +768,142 @@ export const requestHandler = async (req, res) => {
       });
     }
 
+    // =========================================================================
+    // PHASE 10: PATIENT & CARETAKER LINKING, PERMISSIONS & DASHBOARDS
+    // =========================================================================
+
+    // 1. Patient: Generate Invitation Code
+    if (req.method === 'POST' && pathname === '/api/patient/invitations') {
+      const user = getAuthUser(req);
+      if (!user) return sendJson(res, 401, { error: 'Authentication required.' });
+      if (user.role !== 'patient') return sendJson(res, 403, { error: 'Only patients can generate caretaker invitations.' });
+
+      const body = await parseJsonBody(req);
+      const invitation = dataService.createPatientInvitation(user.id, body.permissions);
+      return sendJson(res, 201, { invitation });
+    }
+
+    // 2. Patient: List Generated Invitations
+    if (req.method === 'GET' && pathname === '/api/patient/invitations') {
+      const user = getAuthUser(req);
+      if (!user) return sendJson(res, 401, { error: 'Authentication required.' });
+      if (user.role !== 'patient') return sendJson(res, 403, { error: 'Only patients can view their invitations.' });
+
+      const invitations = dataService.getPatientInvitations(user.id);
+      return sendJson(res, 200, { invitations });
+    }
+
+    // 3. Patient: Revoke Invitation
+    if (req.method === 'DELETE' && pathname.startsWith('/api/patient/invitations/')) {
+      const user = getAuthUser(req);
+      if (!user) return sendJson(res, 401, { error: 'Authentication required.' });
+      if (user.role !== 'patient') return sendJson(res, 403, { error: 'Only patients can revoke their invitations.' });
+
+      const invId = parseInt(pathname.split('/')[4], 10);
+      dataService.revokePatientInvitation(user.id, invId);
+      return sendJson(res, 200, { success: true });
+    }
+
+    // 4. Patient: List Linked Caretakers
+    if (req.method === 'GET' && pathname === '/api/patient/linked-caretakers') {
+      const user = getAuthUser(req);
+      if (!user) return sendJson(res, 401, { error: 'Authentication required.' });
+      if (user.role !== 'patient') return sendJson(res, 403, { error: 'Only patients can view linked caretakers.' });
+
+      const caretakers = dataService.getLinkedCaretakersForPatient(user.id);
+      return sendJson(res, 200, { caretakers });
+    }
+
+    // 5. Patient: Unlink Caretaker
+    if (req.method === 'DELETE' && pathname.startsWith('/api/patient/linked-caretakers/')) {
+      const user = getAuthUser(req);
+      if (!user) return sendJson(res, 401, { error: 'Authentication required.' });
+      if (user.role !== 'patient') return sendJson(res, 403, { error: 'Only patients can unlink caretakers.' });
+
+      const caretakerId = parseInt(pathname.split('/')[4], 10);
+      dataService.unlinkCaretakerFromPatient(user.id, caretakerId);
+      return sendJson(res, 200, { success: true });
+    }
+
+    // 6. Caretaker: Link Patient via Invitation Code
+    if (req.method === 'POST' && pathname === '/api/caretaker/link') {
+      const user = getAuthUser(req);
+      if (!user) return sendJson(res, 401, { error: 'Authentication required.' });
+      if (user.role !== 'caretaker') return sendJson(res, 403, { error: 'Only caretakers can link to patient accounts.' });
+
+      const body = await parseJsonBody(req);
+      if (!body.invitationCode) return sendJson(res, 400, { error: 'Invitation code is required.' });
+
+      const result = dataService.acceptCaretakerInvitation(user.id, body.invitationCode);
+      if (!result.success) {
+        return sendJson(res, 400, { error: result.error });
+      }
+      return sendJson(res, 201, result);
+    }
+
+    // 7. Caretaker: List Linked Patients
+    if (req.method === 'GET' && pathname === '/api/caretaker/linked-patients') {
+      const user = getAuthUser(req);
+      if (!user) return sendJson(res, 401, { error: 'Authentication required.' });
+      if (user.role !== 'caretaker') return sendJson(res, 403, { error: 'Only caretakers can view linked patients.' });
+
+      const patients = dataService.getLinkedPatientsForCaretaker(user.id);
+      return sendJson(res, 200, { patients });
+    }
+
+    // 8. Caretaker: Unlink from Patient
+    if (req.method === 'DELETE' && pathname.startsWith('/api/caretaker/linked-patients/')) {
+      const user = getAuthUser(req);
+      if (!user) return sendJson(res, 401, { error: 'Authentication required.' });
+      if (user.role !== 'caretaker') return sendJson(res, 403, { error: 'Only caretakers can unlink from patients.' });
+
+      const patientId = parseInt(pathname.split('/')[4], 10);
+      dataService.unlinkPatientFromCaretaker(user.id, patientId);
+      return sendJson(res, 200, { success: true });
+    }
+
+    // 9. Caretaker: Get Summary for Specific Patient
+    if (req.method === 'GET' && pathname.startsWith('/api/caretaker/patients/') && pathname.endsWith('/summary')) {
+      const user = getAuthUser(req);
+      if (!user) return sendJson(res, 401, { error: 'Authentication required.' });
+      if (user.role !== 'caretaker') return sendJson(res, 403, { error: 'Only caretakers can access patient summary.' });
+
+      const patientId = parseInt(pathname.split('/')[4], 10);
+      const summary = dataService.getCaretakerPatientSummary(user.id, patientId);
+      return sendJson(res, 200, summary);
+    }
+
+    // 10. Caretaker: Get Missed-Dose Alerts for All Linked Patients
+    if (req.method === 'GET' && pathname === '/api/caretaker/alerts') {
+      const user = getAuthUser(req);
+      if (!user) return sendJson(res, 401, { error: 'Authentication required.' });
+      if (user.role !== 'caretaker') return sendJson(res, 403, { error: 'Only caretakers can view caretaker alerts portal.' });
+
+      const filter = parsedUrl.searchParams.get('filter') || 'all';
+      const alerts = dataService.getAlertsForCaretaker(user.id, filter);
+      return sendJson(res, 200, { alerts });
+    }
+
+    // 11. Caretaker: Acknowledge Alert with Note
+    if (req.method === 'POST' && pathname.startsWith('/api/caretaker/alerts/') && pathname.endsWith('/acknowledge')) {
+      const user = getAuthUser(req);
+      if (!user) return sendJson(res, 401, { error: 'Authentication required.' });
+      if (user.role !== 'caretaker') return sendJson(res, 403, { error: 'Only caretakers can acknowledge alerts.' });
+
+      const alertId = parseInt(pathname.split('/')[4], 10);
+      const body = await parseJsonBody(req);
+      const note = body.note || '';
+
+      const updated = dataService.acknowledgeCaretakerAlert(user.id, alertId, note);
+      return sendJson(res, 200, { success: true, alert: updated });
+    }
+
+    // 12. Demo Account Seeding Endpoint
+    if (req.method === 'POST' && pathname === '/api/demo/seed') {
+      const seedResult = await seedDemoAccounts();
+      return sendJson(res, 200, seedResult);
+    }
+
     // -------------------------------------------------------------------------
     // 404 FALLBACK
     // -------------------------------------------------------------------------
@@ -779,34 +916,53 @@ export const requestHandler = async (req, res) => {
 
 export const server = http.createServer(requestHandler);
 
-export const startServer = (port = PORT) => {
-  return new Promise((resolve, reject) => {
-    server.once('error', (err) => {
-      if (err.code === 'EADDRINUSE') {
-        console.error(`\n======================================================================`);
-        console.error(`[ERROR] Port ${port} is already in use by another running process.`);
-        console.error(`A previous instance of the server is still running.`);
-        console.error(`To fix this:`);
-        console.error(`  1. Close any existing "Medical Reminder - Backend API" command window, or`);
-        console.error(`  2. Double-click "stop.bat" to terminate lingering processes, then re-run start.bat.`);
-        console.error(`======================================================================\n`);
-      } else {
-        console.error('[Server Error]', err);
-      }
-      reject(err);
-    });
+export const startServer = async (port = PORT, maxRetries = 3) => {
+  try {
+    await seedDemoAccounts();
+  } catch (err) {
+    console.warn('[Seed Warning]: Could not seed demo accounts:', err.message);
+  }
 
-    server.listen(port, () => {
-      console.log(`[Smart Medical Reminder Backend] Server running on http://localhost:${port}`);
-      resolve(server);
-    });
+  return new Promise((resolve, reject) => {
+    let attempt = 0;
+
+    const tryListen = () => {
+      attempt++;
+
+      const onError = async (err) => {
+        server.removeListener('error', onError);
+        if (err.code === 'EADDRINUSE' && attempt < maxRetries) {
+          console.warn(`[Port ${port} busy, waiting 1.5s for socket release... (attempt ${attempt}/${maxRetries})]`);
+          await new Promise((r) => setTimeout(r, 1500));
+          tryListen();
+        } else {
+          if (err.code === 'EADDRINUSE') {
+            console.error(`\n======================================================================`);
+            console.error(`[ERROR] Port ${port} is in use by another running process.`);
+            console.error(`To fix this:`);
+            console.error(`  1. Close any existing "Medical Reminder" command windows, or`);
+            console.error(`  2. Double-click "stop.bat" to terminate lingering processes, then re-run start.bat.`);
+            console.error(`======================================================================\n`);
+          } else {
+            console.error('[Server Error]', err);
+          }
+          reject(err);
+          process.exit(1);
+        }
+      };
+
+      server.once('error', onError);
+      server.listen(port, () => {
+        server.removeListener('error', onError);
+        console.log(`[Smart Medical Reminder Backend] Server running on http://localhost:${port}`);
+        resolve(server);
+      });
+    };
+
+    tryListen();
   });
 };
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {
-  startServer(PORT).catch((err) => {
-    if (err.code === 'EADDRINUSE') {
-      process.exit(1);
-    }
-  });
+  startServer(PORT);
 }

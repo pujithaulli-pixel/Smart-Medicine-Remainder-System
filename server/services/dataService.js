@@ -853,3 +853,366 @@ export const recordUserUpload = (userId, { originalName, storedFilename, mimeTyp
 export const getUserUpload = (userId, storedFilename) => {
   return db.prepare('SELECT * FROM user_uploads WHERE user_id = ? AND stored_filename = ?').get(userId, storedFilename);
 };
+
+// -----------------------------------------------------------------------------
+// PATIENT-CARETAKER LINKING & INVITATIONS (Phase 10)
+// -----------------------------------------------------------------------------
+
+export const createPatientInvitation = (patientId, permissions = {}) => {
+  const code = `CARE-${crypto.randomBytes(3).toString('hex').toUpperCase()}`;
+  const id = `inv-${crypto.randomUUID()}`;
+  const nowIso = new Date().toISOString();
+  // Expires in 48 hours
+  const expiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString();
+
+  const defaultPerms = {
+    viewSchedule: permissions.viewSchedule !== false,
+    viewHistory: permissions.viewHistory !== false,
+    receiveAlerts: permissions.receiveAlerts !== false
+  };
+
+  db.prepare(`
+    INSERT INTO patient_invitations (id, patient_id, invitation_code, permissions_json, status, expires_at, created_at)
+    VALUES (?, ?, ?, ?, 'pending', ?, ?)
+  `).run(id, patientId, code, JSON.stringify(defaultPerms), expiresAt, nowIso);
+
+  return {
+    id,
+    invitationCode: code,
+    permissions: defaultPerms,
+    status: 'pending',
+    expiresAt,
+    createdAt: nowIso
+  };
+};
+
+export const getPatientInvitations = (patientId) => {
+  const rows = db.prepare(`
+    SELECT * FROM patient_invitations
+    WHERE patient_id = ?
+    ORDER BY created_at DESC
+  `).all(patientId);
+
+  return rows.map((r) => ({
+    id: r.id,
+    invitationCode: r.invitation_code,
+    permissions: r.permissions_json ? JSON.parse(r.permissions_json) : {},
+    status: r.status,
+    expiresAt: r.expires_at,
+    createdAt: r.created_at,
+    usedAt: r.used_at
+  }));
+};
+
+export const revokePatientInvitation = (patientId, invitationId) => {
+  const stmt = db.prepare(`
+    UPDATE patient_invitations
+    SET status = 'revoked'
+    WHERE patient_id = ? AND (id = ? OR invitation_code = ?)
+  `);
+  stmt.run(patientId, invitationId, invitationId);
+  return true;
+};
+
+export const acceptCaretakerInvitation = (caretakerId, rawCode) => {
+  if (!rawCode || !rawCode.trim()) {
+    throw new Error('Invitation code is required.');
+  }
+
+  const cleanCode = rawCode.trim().toUpperCase();
+  const nowIso = new Date().toISOString();
+
+  // Find invitation
+  const inv = db.prepare(`
+    SELECT * FROM patient_invitations
+    WHERE invitation_code = ? AND status = 'pending' AND expires_at > ?
+  `).get(cleanCode, nowIso);
+
+  if (!inv) {
+    throw new Error('Invalid or expired invitation code.');
+  }
+
+  if (inv.patient_id === caretakerId) {
+    throw new Error('You cannot link your own account as both patient and caretaker.');
+  }
+
+  // Check if link already exists
+  const existing = db.prepare(`
+    SELECT * FROM patient_caretaker_links
+    WHERE patient_id = ? AND caretaker_id = ?
+  `).get(inv.patient_id, caretakerId);
+
+  if (existing) {
+    if (existing.status === 'active') {
+      throw new Error('You are already linked to this patient.');
+    } else {
+      // Reactivate revoked link
+      db.prepare(`
+        UPDATE patient_caretaker_links
+        SET status = 'active', permissions_json = ?, updated_at = ?
+        WHERE id = ?
+      `).run(inv.permissions_json, nowIso, existing.id);
+    }
+  } else {
+    // Create new link
+    const linkId = `link-${crypto.randomUUID()}`;
+    db.prepare(`
+      INSERT INTO patient_caretaker_links (id, patient_id, caretaker_id, status, permissions_json, created_at, updated_at)
+      VALUES (?, ?, ?, 'active', ?, ?, ?)
+    `).run(linkId, inv.patient_id, caretakerId, inv.permissions_json, nowIso, nowIso);
+  }
+
+  // Mark invitation as accepted
+  db.prepare(`
+    UPDATE patient_invitations
+    SET status = 'accepted', used_by_caretaker_id = ?, used_at = ?
+    WHERE id = ?
+  `).run(caretakerId, nowIso, inv.id);
+
+  // Return patient profile
+  const patient = db.prepare('SELECT id, name, email, language FROM users WHERE id = ?').get(inv.patient_id);
+  return {
+    success: true,
+    patient: {
+      id: patient.id,
+      name: patient.name,
+      email: patient.email,
+      permissions: inv.permissions_json ? JSON.parse(inv.permissions_json) : {}
+    }
+  };
+};
+
+export const getLinkedCaretakersForPatient = (patientId) => {
+  const rows = db.prepare(`
+    SELECT l.id AS link_id, l.status, l.permissions_json, l.created_at AS linked_at,
+           u.id AS caretaker_id, u.name, u.email
+    FROM patient_caretaker_links l
+    JOIN users u ON l.caretaker_id = u.id
+    WHERE l.patient_id = ? AND l.status = 'active'
+    ORDER BY l.created_at DESC
+  `).all(patientId);
+
+  return rows.map((r) => ({
+    linkId: r.link_id,
+    caretakerId: r.caretaker_id,
+    name: r.name,
+    email: r.email,
+    permissions: r.permissions_json ? JSON.parse(r.permissions_json) : {},
+    linkedAt: r.linked_at
+  }));
+};
+
+export const unlinkCaretakerFromPatient = (patientId, caretakerId) => {
+  const nowIso = new Date().toISOString();
+  db.prepare(`
+    UPDATE patient_caretaker_links
+    SET status = 'revoked', updated_at = ?
+    WHERE patient_id = ? AND (caretaker_id = ? OR id = ?)
+  `).run(nowIso, patientId, caretakerId, caretakerId);
+  return true;
+};
+
+export const getLinkedPatientsForCaretaker = (caretakerId) => {
+  const rows = db.prepare(`
+    SELECT l.id AS link_id, l.status, l.permissions_json, l.created_at AS linked_at,
+           u.id AS patient_id, u.name, u.email
+    FROM patient_caretaker_links l
+    JOIN users u ON l.patient_id = u.id
+    WHERE l.caretaker_id = ? AND l.status = 'active'
+    ORDER BY l.created_at DESC
+  `).all(caretakerId);
+
+  return rows.map((r) => {
+    const perms = r.permissions_json ? JSON.parse(r.permissions_json) : {};
+    // Get count of unresolved alerts for this patient
+    const alertCount = db.prepare(`
+      SELECT COUNT(*) AS count FROM caretaker_alerts
+      WHERE user_id = ? AND (acknowledged = 0 OR acknowledged IS NULL) AND status != 'resolved'
+    `).get(r.patient_id);
+
+    return {
+      linkId: r.link_id,
+      patientId: r.patient_id,
+      name: r.name,
+      email: r.email,
+      permissions: perms,
+      linkedAt: r.linked_at,
+      unresolvedAlertsCount: alertCount ? alertCount.count : 0
+    };
+  });
+};
+
+export const unlinkPatientFromCaretaker = (caretakerId, patientId) => {
+  const nowIso = new Date().toISOString();
+  db.prepare(`
+    UPDATE patient_caretaker_links
+    SET status = 'revoked', updated_at = ?
+    WHERE caretaker_id = ? AND (patient_id = ? OR id = ?)
+  `).run(nowIso, caretakerId, patientId, patientId);
+  return true;
+};
+
+export const getCaretakerPatientSummary = (caretakerId, patientId) => {
+  // 1. Enforce Link Authorization
+  const link = db.prepare(`
+    SELECT * FROM patient_caretaker_links
+    WHERE caretaker_id = ? AND patient_id = ? AND status = 'active'
+  `).get(caretakerId, patientId);
+
+  if (!link) {
+    const err = new Error('Forbidden: You are not authorized to view this patient\'s records.');
+    err.statusCode = 403;
+    throw err;
+  }
+
+  const permissions = link.permissions_json ? JSON.parse(link.permissions_json) : {};
+  const patient = db.prepare('SELECT id, name, email, language FROM users WHERE id = ?').get(patientId);
+  if (!patient) throw new Error('Patient not found.');
+
+  const todayStr = new Date().toISOString().slice(0, 10);
+  let todayDoses = [];
+  let medicines = [];
+  let adherence = null;
+
+  if (permissions.viewSchedule) {
+    todayDoses = getDoseOccurrencesForDate(patientId, todayStr);
+    medicines = getMedicines(patientId);
+  }
+
+  if (permissions.viewHistory) {
+    const history = getDoseHistory(patientId);
+    // Simple adherence calculation: taken / (taken + missed + skipped)
+    const taken = history.filter((h) => h.status === 'taken').length;
+    const missed = history.filter((h) => h.status === 'missed').length;
+    const skipped = history.filter((h) => h.status === 'skipped').length;
+    const total = taken + missed + skipped;
+    adherence = {
+      taken,
+      missed,
+      skipped,
+      adherencePercent: total > 0 ? Math.round((taken / total) * 100) : null
+    };
+  }
+
+  const alerts = db.prepare(`
+    SELECT * FROM caretaker_alerts
+    WHERE user_id = ?
+    ORDER BY created_at DESC
+    LIMIT 20
+  `).all(patientId).map((a) => ({
+    id: a.id,
+    alertType: a.alert_type,
+    medicineName: a.medicine_name,
+    dosage: a.dosage,
+    scheduledTime: a.scheduled_time,
+    scheduledDate: a.scheduled_date,
+    status: a.status,
+    acknowledged: Boolean(a.acknowledged),
+    acknowledgedAt: a.acknowledged_at,
+    caretakerNote: a.caretaker_note,
+    createdAt: a.created_at
+  }));
+
+  return {
+    patient: {
+      id: patient.id,
+      name: patient.name,
+      email: patient.email
+    },
+    permissions,
+    todayDoses,
+    medicines,
+    adherence,
+    alerts
+  };
+};
+
+export const getAlertsForCaretaker = (caretakerId, filter = 'all') => {
+  // Find linked patients
+  const links = db.prepare(`
+    SELECT patient_id FROM patient_caretaker_links
+    WHERE caretaker_id = ? AND status = 'active'
+  `).all(caretakerId);
+
+  if (links.length === 0) return [];
+  const patientIds = links.map((l) => l.patient_id);
+  const placeholders = patientIds.map(() => '?').join(',');
+
+  let query = `
+    SELECT a.*, u.name AS patient_name, u.email AS patient_email
+    FROM caretaker_alerts a
+    JOIN users u ON a.user_id = u.id
+    WHERE a.user_id IN (${placeholders})
+  `;
+  const params = [...patientIds];
+
+  if (filter === 'unresolved') {
+    query += ' AND (a.acknowledged = 0 OR a.acknowledged IS NULL) AND a.status != \'resolved\'';
+  } else if (filter === 'acknowledged') {
+    query += ' AND a.acknowledged = 1';
+  } else if (filter === 'resolved') {
+    query += ' AND a.status = \'resolved\'';
+  }
+
+  query += ' ORDER BY a.created_at DESC';
+
+  const rows = db.prepare(query).all(...params);
+  return rows.map((r) => ({
+    id: r.id,
+    userId: r.user_id,
+    patientId: r.user_id,
+    patientName: r.patient_name,
+    patientEmail: r.patient_email,
+    alertType: r.alert_type,
+    medicineName: r.medicine_name,
+    dosage: r.dosage,
+    scheduledDate: r.scheduled_date,
+    scheduledTime: r.scheduled_time,
+    doseOccurrenceId: r.dose_occurrence_id,
+    status: r.status,
+    acknowledged: Boolean(r.acknowledged),
+    acknowledgedAt: r.acknowledged_at,
+    acknowledgedBy: r.acknowledged_by,
+    caretakerNote: r.caretaker_note,
+    retryCount: r.retry_count,
+    lastAttemptAt: r.last_attempt_at,
+    createdAt: r.created_at
+  }));
+};
+
+export const acknowledgeCaretakerAlert = (caretakerId, alertId, note = '') => {
+  const alert = db.prepare('SELECT * FROM caretaker_alerts WHERE id = ?').get(alertId);
+  if (!alert) {
+    const err = new Error('Alert not found.');
+    err.statusCode = 404;
+    throw err;
+  }
+
+  // Verify that the caretaker is actively linked to the patient who owns this alert
+  const link = db.prepare(`
+    SELECT * FROM patient_caretaker_links
+    WHERE caretaker_id = ? AND patient_id = ? AND status = 'active'
+  `).get(caretakerId, alert.user_id);
+
+  if (!link) {
+    const err = new Error('Forbidden: You are not authorized to acknowledge alerts for this patient.');
+    err.statusCode = 403;
+    throw err;
+  }
+
+  const nowIso = new Date().toISOString();
+  db.prepare(`
+    UPDATE caretaker_alerts
+    SET acknowledged = 1, acknowledged_at = ?, acknowledged_by = ?, caretaker_note = ?
+    WHERE id = ?
+  `).run(nowIso, caretakerId, note ? note.trim() : null, alertId);
+
+  // Note: dose status in dose_occurrences / medicines remains untouched (per Requirement 3)
+  return {
+    success: true,
+    alertId,
+    acknowledged: true,
+    acknowledgedAt: nowIso,
+    caretakerNote: note ? note.trim() : null
+  };
+};

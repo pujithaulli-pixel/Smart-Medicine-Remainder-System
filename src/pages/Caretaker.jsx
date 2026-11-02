@@ -20,20 +20,20 @@ export const Caretaker = () => {
 
   // Form state
   const [formData, setFormData] = useState({
-    name: caretaker.name || '',
-    relationship: caretaker.relationship || '',
-    phone: caretaker.phone || '',
-    email: caretaker.email || '',
-    preferredLanguage: caretaker.preferredLanguage || 'en',
-    preferredChannel: caretaker.preferredChannel || 'email',
-    alertsEnabled: caretaker.alertsEnabled !== false,
-    notifyMissed: caretaker.notifyMissed !== false,
-    notifySnoozeLimit: caretaker.notifySnoozeLimit !== false,
-    notifyLowStock: caretaker.notifyLowStock !== false,
-    quietHoursEnabled: Boolean(caretaker.quietHoursEnabled),
-    quietHoursStart: caretaker.quietHoursStart || '22:00',
-    quietHoursEnd: caretaker.quietHoursEnd || '07:00',
-    emergencyNotes: caretaker.emergencyNotes || ''
+    name: caretaker?.name || '',
+    relationship: caretaker?.relationship || '',
+    phone: caretaker?.phone || '',
+    email: caretaker?.email || '',
+    preferredLanguage: caretaker?.preferredLanguage || 'en',
+    preferredChannel: caretaker?.preferredChannel || 'email',
+    alertsEnabled: caretaker?.alertsEnabled !== false,
+    notifyMissed: caretaker?.notifyMissed !== false,
+    notifySnoozeLimit: caretaker?.notifySnoozeLimit !== false,
+    notifyLowStock: caretaker?.notifyLowStock !== false,
+    quietHoursEnabled: Boolean(caretaker?.quietHoursEnabled),
+    quietHoursStart: caretaker?.quietHoursStart || '22:00',
+    quietHoursEnd: caretaker?.quietHoursEnd || '07:00',
+    emergencyNotes: caretaker?.emergencyNotes || ''
   });
 
   const [errors, setErrors] = useState({});
@@ -171,7 +171,7 @@ export const Caretaker = () => {
 
   // Filtered Alert History
   const filteredAlerts = useMemo(() => {
-    return caretakerAlerts.filter((a) => {
+    return (caretakerAlerts || []).filter((a) => {
       if (historyFilter === 'missed') return a.alertType === 'missed_dose';
       if (historyFilter === 'snooze') return a.alertType === 'snooze_warning';
       if (historyFilter === 'stock') return a.alertType === 'low_stock';

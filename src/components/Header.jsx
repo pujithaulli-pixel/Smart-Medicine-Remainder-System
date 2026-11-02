@@ -7,7 +7,8 @@ import {
   IconCalendar,
   IconCheckCircle,
   IconAlertCircle,
-  IconClock
+  IconClock,
+  IconLogOut
 } from './Icons';
 import { useApp } from '../context/AppContext';
 import { formatDisplayDate, getTodayDateString } from '../utils/dateUtils';
@@ -27,7 +28,8 @@ export const Header = () => {
     user,
     setAuthModalOpen,
     setAuthMode,
-    setProfileModalOpen
+    setProfileModalOpen,
+    logout
   } = useApp();
 
   const [notificationsOpen, setNotificationsOpen] = useState(false);
@@ -47,7 +49,7 @@ export const Header = () => {
   const getPageTitle = () => {
     switch (activePage) {
       case 'dashboard':
-        return t.nav.dashboard;
+        return user?.role === 'caretaker' ? (t.caretakerDashboard?.title || 'Caretaker Center') : t.nav.dashboard;
       case 'addMedicine':
         return t.nav.addMedicine;
       case 'myMedicines':
@@ -332,60 +334,91 @@ export const Header = () => {
           )}
         </div>
 
-        {/* User Profile / Auth Area */}
+        {/* User Profile / Auth Area & Direct Logout Button */}
         {user ? (
-          <button
-            type="button"
-            onClick={() => setProfileModalOpen(true)}
-            aria-label={t.auth?.myAccount || 'My Account'}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '10px',
-              padding: '4px 12px 4px 6px',
-              borderRadius: '24px',
-              backgroundColor: 'var(--bg-subtle)',
-              border: '1px solid var(--border-light)',
-              cursor: 'pointer',
-              textAlign: 'left'
-            }}
-          >
-            <div
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <button
+              type="button"
+              onClick={() => setProfileModalOpen(true)}
+              aria-label={t.auth?.myAccount || 'My Account'}
+              title="View Profile & Settings"
               style={{
-                width: '34px',
-                height: '34px',
-                borderRadius: '50%',
-                backgroundColor: 'var(--primary-600)',
-                color: '#ffffff',
                 display: 'flex',
                 alignItems: 'center',
-                justifyContent: 'center',
-                fontWeight: 700,
-                fontSize: '0.9rem',
-                flexShrink: 0
+                gap: '10px',
+                padding: '4px 12px 4px 6px',
+                borderRadius: '24px',
+                backgroundColor: 'var(--bg-subtle)',
+                border: '1px solid var(--border-light)',
+                cursor: 'pointer',
+                textAlign: 'left'
               }}
             >
-              {(user.name ? user.name.charAt(0) : user.email?.charAt(0) || 'U').toUpperCase()}
-            </div>
-            <div className="header-user-text" style={{ fontSize: '0.88rem' }}>
-              <div style={{ fontWeight: 700, color: 'var(--text-main)', lineHeight: 1.2, display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <span>{user.name || user.email?.split('@')[0]}</span>
-                <span
-                  title={t.auth?.syncActive || 'Cloud Sync Active'}
-                  style={{
-                    width: '8px',
-                    height: '8px',
-                    borderRadius: '50%',
-                    backgroundColor: '#16a34a',
-                    display: 'inline-block'
-                  }}
-                />
+              <div
+                style={{
+                  width: '34px',
+                  height: '34px',
+                  borderRadius: '50%',
+                  backgroundColor: user.role === 'caretaker' ? '#9333ea' : 'var(--primary-600)',
+                  color: '#ffffff',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontWeight: 700,
+                  fontSize: '0.9rem',
+                  flexShrink: 0
+                }}
+              >
+                {(user.name ? user.name.charAt(0) : user.email?.charAt(0) || 'U').toUpperCase()}
               </div>
-              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                {t.auth?.myAccount || 'My Account'}
+              <div className="header-user-text" style={{ fontSize: '0.88rem' }}>
+                <div style={{ fontWeight: 700, color: 'var(--text-main)', lineHeight: 1.2, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span>{user.name || user.email?.split('@')[0]}</span>
+                  <span
+                    style={{
+                      fontSize: '0.7rem',
+                      fontWeight: 800,
+                      padding: '1px 6px',
+                      borderRadius: '4px',
+                      backgroundColor: user.role === 'caretaker' ? '#f3e8ff' : '#e0f2fe',
+                      color: user.role === 'caretaker' ? '#7e22ce' : '#0369a1'
+                    }}
+                  >
+                    {user.role === 'caretaker' ? (t.roles?.caretaker || 'Caretaker') : (t.roles?.patient || 'Patient')}
+                  </span>
+                </div>
+                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                  {t.auth?.myAccount || 'My Account'}
+                </div>
               </div>
-            </div>
-          </button>
+            </button>
+
+            {/* Direct Logout / Sign Out Button */}
+            <button
+              type="button"
+              onClick={logout}
+              aria-label={t.auth?.signOut || 'Log Out'}
+              title={t.auth?.signOut || 'Log Out'}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '7px 14px',
+                borderRadius: '10px',
+                border: '1px solid #fecaca',
+                backgroundColor: '#fef2f2',
+                color: '#dc2626',
+                fontWeight: 700,
+                fontSize: '0.84rem',
+                cursor: 'pointer',
+                transition: 'all 0.15s ease',
+                whiteSpace: 'nowrap'
+              }}
+            >
+              <IconLogOut size={16} color="#dc2626" />
+              <span>{t.auth?.signOut || 'Sign Out'}</span>
+            </button>
+          </div>
         ) : (
           <div
             style={{

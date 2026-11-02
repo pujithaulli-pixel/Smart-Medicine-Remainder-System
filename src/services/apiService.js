@@ -91,10 +91,10 @@ const request = async (endpoint, options = {}) => {
 // -----------------------------------------------------------------------------
 
 export const authApi = {
-  async register({ name, email, password, language = 'en', timezone = 'Asia/Kolkata' }) {
+  async register({ name, email, password, role = 'patient', language = 'en', timezone = 'Asia/Kolkata' }) {
     const res = await request('/api/auth/register', {
       method: 'POST',
-      body: JSON.stringify({ name, email, password, language, timezone })
+      body: JSON.stringify({ name, email, password, role, language, timezone })
     });
     if (res.token && res.user) {
       setAuthSession(res.token, res.user);
@@ -102,7 +102,15 @@ export const authApi = {
     return res;
   },
 
-  async login({ email, password }) {
+  async login(credentialsOrEmail, maybePassword) {
+    let email, password;
+    if (typeof credentialsOrEmail === 'object' && credentialsOrEmail !== null) {
+      email = credentialsOrEmail.email;
+      password = credentialsOrEmail.password;
+    } else {
+      email = credentialsOrEmail;
+      password = maybePassword;
+    }
     const res = await request('/api/auth/login', {
       method: 'POST',
       body: JSON.stringify({ email, password })
@@ -311,5 +319,74 @@ export const fileApi = {
       body: JSON.stringify({ filename, mimeType, dataBase64, fileType })
     });
     return res;
+  }
+};
+
+// -----------------------------------------------------------------------------
+// PHASE 10: PATIENT & CARETAKER LINKING, PERMISSIONS & DASHBOARDS
+// -----------------------------------------------------------------------------
+
+export const patientPortalApi = {
+  async getInvitations() {
+    const res = await request('/api/patient/invitations');
+    return res.invitations || [];
+  },
+  async createInvitation(permissions = {}) {
+    const res = await request('/api/patient/invitations', {
+      method: 'POST',
+      body: JSON.stringify({ permissions })
+    });
+    return res.invitation;
+  },
+  async revokeInvitation(id) {
+    return await request(`/api/patient/invitations/${id}`, { method: 'DELETE' });
+  },
+  async getLinkedCaretakers() {
+    const res = await request('/api/patient/linked-caretakers');
+    return res.caretakers || [];
+  },
+  async unlinkCaretaker(caretakerId) {
+    return await request(`/api/patient/linked-caretakers/${caretakerId}`, { method: 'DELETE' });
+  }
+};
+
+export const caretakerPortalApi = {
+  async linkPatient(invitationCode) {
+    return await request('/api/caretaker/link', {
+      method: 'POST',
+      body: JSON.stringify({ invitationCode })
+    });
+  },
+  async getLinkedPatients() {
+    const res = await request('/api/caretaker/linked-patients');
+    return res.patients || [];
+  },
+  async unlinkPatient(patientId) {
+    return await request(`/api/caretaker/linked-patients/${patientId}`, { method: 'DELETE' });
+  },
+  async getPatientSummary(patientId) {
+    return await request(`/api/caretaker/patients/${patientId}/summary`);
+  },
+  async getAlerts(filter = 'all') {
+    const res = await request(`/api/caretaker/alerts?filter=${encodeURIComponent(filter)}`);
+    return res.alerts || [];
+  },
+  async acknowledgeAlert(alertId, note = '') {
+    return await request(`/api/caretaker/alerts/${alertId}/acknowledge`, {
+      method: 'POST',
+      body: JSON.stringify({ note })
+    });
+  }
+};
+
+export const demoApi = {
+  async seedDemo() {
+    return await request('/api/demo/seed', { method: 'POST' });
+  },
+  async loginDemoPatient() {
+    return await authApi.login('demo.patient@smartreminder.org', 'DemoPatient123!');
+  },
+  async loginDemoCaretaker() {
+    return await authApi.login('demo.caretaker@smartreminder.org', 'DemoCaretaker123!');
   }
 };

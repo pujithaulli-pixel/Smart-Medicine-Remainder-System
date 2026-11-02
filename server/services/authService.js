@@ -62,7 +62,7 @@ export const validateSession = (token) => {
   const nowIso = new Date().toISOString();
   const stmt = db.prepare(`
     SELECT s.id AS session_id, s.token, s.expires_at,
-           u.id AS user_id, u.email, u.name, u.language, u.timezone, u.created_at
+           u.id AS user_id, u.email, u.name, u.role, u.language, u.timezone, u.created_at
     FROM sessions s
     JOIN users u ON s.user_id = u.id
     WHERE s.token = ? AND s.expires_at > ?
@@ -75,6 +75,7 @@ export const validateSession = (token) => {
     id: row.user_id,
     email: row.email,
     name: row.name,
+    role: row.role || 'patient',
     language: row.language || 'en',
     preferredLanguage: row.language || 'en',
     timezone: row.timezone || 'Asia/Kolkata',
@@ -96,7 +97,7 @@ export const deleteSession = (token) => {
 /**
  * Register a new user
  */
-export const registerUser = ({ name, email, password, language, preferredLanguage, timezone = 'Asia/Kolkata', phone = '' }) => {
+export const registerUser = ({ name, email, password, role = 'patient', language, preferredLanguage, timezone = 'Asia/Kolkata', phone = '' }) => {
   if (!name || !name.trim()) {
     throw new Error('Name is required.');
   }
@@ -109,6 +110,7 @@ export const registerUser = ({ name, email, password, language, preferredLanguag
 
   const cleanEmail = email.trim().toLowerCase();
   const userLang = preferredLanguage || language || 'en';
+  const userRole = role === 'caretaker' ? 'caretaker' : 'patient';
 
   // Check uniqueness
   const existing = db.prepare('SELECT id FROM users WHERE email = ?').get(cleanEmail);
@@ -124,9 +126,9 @@ export const registerUser = ({ name, email, password, language, preferredLanguag
 
   // Insert user
   db.prepare(`
-    INSERT INTO users (id, email, name, password_hash, salt, language, timezone, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(userId, cleanEmail, name.trim(), hash, salt, userLang, timezone, nowIso, nowIso);
+    INSERT INTO users (id, email, name, password_hash, salt, role, language, timezone, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(userId, cleanEmail, name.trim(), hash, salt, userRole, userLang, timezone, nowIso, nowIso);
 
   // Initialize default caretaker profile
   db.prepare(`
@@ -148,6 +150,7 @@ export const registerUser = ({ name, email, password, language, preferredLanguag
       id: userId,
       email: cleanEmail,
       name: name.trim(),
+      role: userRole,
       language: userLang,
       preferredLanguage: userLang,
       timezone,
@@ -180,6 +183,7 @@ export const loginUser = ({ email, password }) => {
       id: user.id,
       email: user.email,
       name: user.name,
+      role: user.role || 'patient',
       language: user.language || 'en',
       timezone: user.timezone || 'Asia/Kolkata',
       createdAt: user.created_at
@@ -193,12 +197,13 @@ export const loginUser = ({ email, password }) => {
  * Get profile details
  */
 export const getUserProfile = (userId) => {
-  const row = db.prepare('SELECT id, email, name, language, timezone, created_at FROM users WHERE id = ?').get(userId);
+  const row = db.prepare('SELECT id, email, name, role, language, timezone, created_at FROM users WHERE id = ?').get(userId);
   if (!row) return null;
   return {
     id: row.id,
     email: row.email,
     name: row.name,
+    role: row.role || 'patient',
     language: row.language,
     preferredLanguage: row.language,
     timezone: row.timezone,

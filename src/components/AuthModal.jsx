@@ -5,9 +5,10 @@ import { IconShield, IconAlertCircle, IconCheck, IconEye } from './Icons';
 import { authApi } from '../services/apiService';
 
 export const AuthModal = ({ isOpen, onClose, initialMode = 'login', onAuthSuccess }) => {
-  const { t, language, showToast, refreshUserData } = useApp();
+  const { t, language, showToast, refreshUserData, setUser, setActivePage } = useApp();
   const [mode, setMode] = useState(initialMode); // 'login' or 'register'
 
+  const [role, setRole] = useState('patient'); // 'patient' or 'caretaker'
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -18,12 +19,34 @@ export const AuthModal = ({ isOpen, onClose, initialMode = 'login', onAuthSucces
   const [errorMessage, setErrorMessage] = useState('');
 
   const resetForm = () => {
+    setRole('patient');
     setName('');
     setEmail('');
     setPassword('');
     setConfirmPassword('');
     setErrorMessage('');
     setLoading(false);
+  };
+
+  const handleQuickDemo = async (demoRole) => {
+    setLoading(true);
+    setErrorMessage('');
+    try {
+      const demoEmail = demoRole === 'patient' ? 'demo.patient@smartreminder.org' : 'demo.caretaker@smartreminder.org';
+      const demoPass = demoRole === 'patient' ? 'DemoPatient123!' : 'DemoCaretaker123!';
+      const result = await authApi.login({ email: demoEmail, password: demoPass });
+      if (result && result.user) {
+        setUser(result.user);
+        showToast(`Signed in as Demo ${demoRole === 'patient' ? 'Patient' : 'Caretaker'}!`, 'success');
+        resetForm();
+        onClose();
+        if (onAuthSuccess) onAuthSuccess(result.user);
+      }
+    } catch (err) {
+      setErrorMessage(err.message || 'Demo login failed.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleModeSwitch = (newMode) => {
@@ -45,8 +68,8 @@ export const AuthModal = ({ isOpen, onClose, initialMode = 'login', onAuthSucces
         setErrorMessage(t.auth?.nameRequired || 'Full name is required.');
         return;
       }
-      if (password.length < 6) {
-        setErrorMessage(t.auth?.passwordTooShort || 'Password must be at least 6 characters.');
+      if (password.length < 8) {
+        setErrorMessage(t.auth?.passwordTooShort || 'Password must be at least 8 characters long.');
         return;
       }
       if (password !== confirmPassword) {
@@ -64,6 +87,7 @@ export const AuthModal = ({ isOpen, onClose, initialMode = 'login', onAuthSucces
           name: name.trim(),
           email: email.trim(),
           password,
+          role,
           language
         });
         showToast(t.auth?.registerSuccess || 'Account created successfully!');
@@ -73,6 +97,11 @@ export const AuthModal = ({ isOpen, onClose, initialMode = 'login', onAuthSucces
           password
         });
         showToast(t.auth?.loginSuccess || 'Signed in successfully!');
+      }
+
+      if (result && result.user) {
+        setUser(result.user);
+        setActivePage('dashboard');
       }
 
       resetForm();
@@ -178,6 +207,48 @@ export const AuthModal = ({ isOpen, onClose, initialMode = 'login', onAuthSucces
           {mode === 'register' && (
             <div className="form-group" style={{ margin: 0 }}>
               <label className="form-label" style={{ fontWeight: 700 }}>
+                {t.roles?.roleLabel || 'Account Role'} *
+              </label>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                <button
+                  type="button"
+                  onClick={() => setRole('patient')}
+                  style={{
+                    padding: '10px 14px',
+                    borderRadius: '8px',
+                    border: role === 'patient' ? '2px solid #0d9488' : '1px solid #cbd5e1',
+                    backgroundColor: role === 'patient' ? '#f0fdfa' : '#ffffff',
+                    fontWeight: 700,
+                    color: role === 'patient' ? '#0f766e' : '#475569',
+                    cursor: 'pointer',
+                    fontSize: '0.9rem'
+                  }}
+                >
+                  {t.roles?.patient || 'Patient'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setRole('caretaker')}
+                  style={{
+                    padding: '10px 14px',
+                    borderRadius: '8px',
+                    border: role === 'caretaker' ? '2px solid #9333ea' : '1px solid #cbd5e1',
+                    backgroundColor: role === 'caretaker' ? '#faf5ff' : '#ffffff',
+                    fontWeight: 700,
+                    color: role === 'caretaker' ? '#7e22ce' : '#475569',
+                    cursor: 'pointer',
+                    fontSize: '0.9rem'
+                  }}
+                >
+                  {t.roles?.caretaker || 'Caretaker'}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {mode === 'register' && (
+            <div className="form-group" style={{ margin: 0 }}>
+              <label className="form-label" style={{ fontWeight: 700 }}>
                 {t.auth?.name || 'Full Name'} *
               </label>
               <input
@@ -263,6 +334,35 @@ export const AuthModal = ({ isOpen, onClose, initialMode = 'login', onAuthSucces
             {loading ? (t.common?.loading || 'Processing...') : mode === 'login' ? (t.auth?.signIn || 'Sign In') : (t.auth?.signUp || 'Create Account')}
           </button>
         </form>
+
+        {/* Quick Demo Login Option for Evaluation */}
+        {mode === 'login' && (
+          <div style={{ marginTop: '14px', borderTop: '1px solid var(--border-light, #e2e8f0)', paddingTop: '14px' }}>
+            <span style={{ fontSize: '0.78rem', color: 'var(--text-muted, #64748b)', fontWeight: 700, display: 'block', textAlign: 'center', marginBottom: '8px' }}>
+              INSTANT DEMO EVALUATION
+            </span>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                onClick={() => handleQuickDemo('patient')}
+                disabled={loading}
+                style={{ justifyContent: 'center', fontSize: '0.82rem' }}
+              >
+                Demo Patient
+              </button>
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                onClick={() => handleQuickDemo('caretaker')}
+                disabled={loading}
+                style={{ justifyContent: 'center', fontSize: '0.82rem', borderColor: '#9333ea', color: '#7e22ce' }}
+              >
+                Demo Caretaker
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Footer Link */}
         <div style={{ textAlign: 'center', fontSize: '0.86rem', color: 'var(--text-muted)' }}>

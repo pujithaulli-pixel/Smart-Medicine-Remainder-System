@@ -33,16 +33,8 @@ if not exist "node_modules\" (
 
 :: 3. Free ports 3001 and 3000 if previously left running
 echo [INFO] Ensuring ports 3001 and 3000 are available...
-for /f "tokens=5" %%a in ('netstat -ano ^| findstr ":3001"') do (
-    if not "%%a"=="0" (
-        taskkill /F /PID %%a >nul 2>nul
-    )
-)
-for /f "tokens=5" %%a in ('netstat -ano ^| findstr ":3000"') do (
-    if not "%%a"=="0" (
-        taskkill /F /PID %%a >nul 2>nul
-    )
-)
+powershell -NoProfile -ExecutionPolicy Bypass -Command "Stop-Process -Id (Get-NetTCPConnection -LocalPort 3000,3001 -State Listen -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess -Unique) -Force -ErrorAction SilentlyContinue" >nul 2>nul
+timeout /t 2 /nobreak >nul
 
 :: 4. Launch the Backend Notification Service (Port 3001)
 echo [1/3] Starting Backend API Server on port 3001...

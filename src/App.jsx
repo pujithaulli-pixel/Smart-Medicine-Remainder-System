@@ -3,6 +3,8 @@ import { useApp } from './context/AppContext';
 import { Sidebar } from './components/Sidebar';
 import { Header } from './components/Header';
 import { Dashboard } from './pages/Dashboard';
+import { CaretakerDashboard } from './pages/CaretakerDashboard';
+import { WelcomeLanding } from './pages/WelcomeLanding';
 import { AddMedicine } from './pages/AddMedicine';
 import { MyMedicines } from './pages/MyMedicines';
 import { MedicineTaken } from './pages/MedicineTaken';
@@ -20,6 +22,7 @@ import { IconCheckCircle, IconAlertCircle, IconInfo } from './components/Icons';
 
 export const App = () => {
   const {
+    user,
     activePage,
     toast,
     dueDoses,
@@ -36,7 +39,40 @@ export const App = () => {
     logout
   } = useApp();
 
+  // 1. Unauthenticated Visitor Experience (Requirement 1 & 4)
+  // Hide private reminders, notifications, and patient schedules before login
+  if (!user) {
+    return (
+      <div className="unauthenticated-app">
+        <AuthModal
+          isOpen={authModalOpen}
+          onClose={() => setAuthModalOpen(false)}
+          initialMode={authMode}
+        />
+        <WelcomeLanding />
+      </div>
+    );
+  }
+
+  // 2. Role-Based Navigation & Page Rendering (Requirement 1, 2 & 3)
+  const isCaretaker = user.role === 'caretaker';
+
   const renderActivePage = () => {
+    if (isCaretaker) {
+      // Caretakers can only access CaretakerDashboard, Caretaker Profile, and Settings
+      switch (activePage) {
+        case 'dashboard':
+          return <CaretakerDashboard />;
+        case 'caretaker':
+          return <Caretaker />;
+        case 'settings':
+          return <Settings />;
+        default:
+          return <CaretakerDashboard />;
+      }
+    }
+
+    // Patient Pages
     switch (activePage) {
       case 'dashboard':
         return <Dashboard />;
@@ -63,8 +99,8 @@ export const App = () => {
 
   return (
     <div className="app-container">
-      {/* Prominent Reminder Alarm Modal */}
-      {!isReminderDismissed && dueDoses && dueDoses.length > 0 && <ReminderModal />}
+      {/* Prominent Reminder Alarm Modal (Patients Only) */}
+      {!isReminderDismissed && dueDoses && dueDoses.length > 0 && !isCaretaker && <ReminderModal />}
 
       {/* Slide-out Caretaker Alerts & Notifications Panel */}
       <NotificationPanel
@@ -72,7 +108,7 @@ export const App = () => {
         onClose={() => setIsNotificationPanelOpen(false)}
       />
 
-      {/* User Authentication & Account Modals (Phase 7) */}
+      {/* User Authentication & Account Modals */}
       <AuthModal
         isOpen={authModalOpen}
         onClose={() => setAuthModalOpen(false)}
